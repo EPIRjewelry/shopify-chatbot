@@ -23,18 +23,19 @@ const API_VERSION = process.env.SHOPIFY_API_VERSION || "2025-01";
 // Funkcja pomocnicza do pobierania produktów z Shopify
 const getShopifyProducts = async () => {
     try {
-        const response = await axios.get(`${SHOPIFY_STORE_URL}/admin/api/${SHOPIFY_API_VERSION}/products.json`, {
-    headers: { 
-        'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
-        'Content-Type': 'application/json'
-    }
-});
+       try {
+    const response = await axios.get(`${SHOPIFY_STORE_URL}/admin/api/${SHOPIFY_API_VERSION}/products.json`, {
+        headers: { 
+            'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
+            'Content-Type': 'application/json'
+        }
+    });
+    return response.data.products;
+} catch (error) {
+    console.error("Błąd podczas pobierania produktów z Shopify:", error.response?.data || error.message);
+    throw new Error("Błąd połączenia z Shopify");
+}
 
-        });
-        return response.data.products;
-    } catch (error) {
-        console.error('Błąd podczas pobierania produktów z Shopify:', error.response?.data || error.message);
-        throw new Error('Błąd połączenia z Shopify');
     }
 };
 
