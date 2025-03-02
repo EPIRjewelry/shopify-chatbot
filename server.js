@@ -37,7 +37,7 @@ const getShopifyProducts = async () => {
 }
 
     }
-};
+
 
 // Endpoint do pobierania produktów z Shopify
 app.get('/api/products', async (req, res) => {
