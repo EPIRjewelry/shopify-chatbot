@@ -33,7 +33,10 @@ app.post('/api/chatbot', async (req, res) => {
 });
 
 const PORT = process.env.PORT;
-;
-app.listen(PORT, () => {
+;app.get("/", (req, res) => {
+    res.send("Serwer działa poprawnie!");
+});
+
+app.listen(PORT), () => {
   console.log(`Serwer działa na porcie ${PORT}`);
 });
