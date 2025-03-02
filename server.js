@@ -17,15 +17,26 @@ const SHOPIFY_ACCESS_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
 const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL;
 const API_VERSION = process.env.SHOPIFY_API_VERSION || "2025-01";
 
-// Endpoint do pobierania produktów z Shopify
-app.get('/api/products', async (req, res) => {
+// Funkcja pomocnicza do pobierania produktów z Shopify
+const getShopifyProducts = async () => {
     try {
         const response = await axios.get(`${SHOPIFY_STORE_URL}/admin/api/${API_VERSION}/products.json`, {
             headers: { 'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN }
         });
-        res.json(response.data);
+        return response.data.products;
     } catch (error) {
-        res.status(500).json({ error: 'Błąd połączenia z Shopify', details: error.response?.data });
+        console.error('Błąd podczas pobierania produktów z Shopify:', error.response?.data || error.message);
+        throw new Error('Błąd połączenia z Shopify');
+    }
+};
+
+// Endpoint do pobierania produktów z Shopify
+app.get('/api/products', async (req, res) => {
+    try {
+        const products = await getShopifyProducts();
+        res.json({ products });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -37,17 +48,14 @@ app.post('/api/chatbot', async (req, res) => {
             return res.status(400).json({ error: 'Brak wiadomości w żądaniu' });
         }
 
-        // Pobranie produktów z Shopify
-        const shopifyResponse = await axios.get(`${SHOPIFY_STORE_URL}/admin/api/${API_VERSION}/products.json`, {
-            headers: { 'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN }
-        });
-        const products = shopifyResponse.data.products.map(p => `${p.title}: ${p.body_html}`).join("\n");
+        const products = await getShopifyProducts();
+        const productsText = products.map(p => `${p.title}: ${p.body_html}`).join("\n");
 
-        // Wysyłanie zapytania do OpenAI
-        const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+        // Wysyłanie zapytania do API OpenAI
+        const openAIResponse = await axios.post('https://api.openai.com/v1/chat/completions', {
             model: 'gpt-4.5-preview',
             messages: [
-                { role: 'system', content: `Jesteś doradcą klienta w sklepie EPIR Jewellery. Oto aktualna lista produktów: \n${products}` },
+                { role: 'system', content: `Jesteś doradcą klienta w sklepie EPIR Jewellery. Oto aktualna lista produktów:\n${productsText}` },
                 { role: 'user', content: message }
             ],
         }, {
@@ -57,9 +65,10 @@ app.post('/api/chatbot', async (req, res) => {
             }
         });
 
-        res.json({ response: response.data.choices[0].message.content });
+        res.json({ response: openAIResponse.data.choices[0].message.content });
     } catch (error) {
-        res.status(500).json({ response: 'Wystąpił błąd w API OpenAI.', details: error.response?.data });
+        console.error('Błąd w endpointach:', error.response?.data || error.message);
+        res.status(500).json({ error: 'Wystąpił błąd w przetwarzaniu żądania', details: error.response?.data });
     }
 });
 
