@@ -23,8 +23,13 @@ const API_VERSION = process.env.SHOPIFY_API_VERSION || "2025-01";
 // Funkcja pomocnicza do pobierania produktów z Shopify
 const getShopifyProducts = async () => {
     try {
-        const response = await axios.get(`${SHOPIFY_STORE_URL}/admin/api/${API_VERSION}/products.json`, {
-            headers: { 'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN }
+        const response = await axios.get(`${SHOPIFY_STORE_URL}/admin/api/${SHOPIFY_API_VERSION}/products.json`, {
+    headers: { 
+        'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
+        'Content-Type': 'application/json'
+    }
+});
+
         });
         return response.data.products;
     } catch (error) {
