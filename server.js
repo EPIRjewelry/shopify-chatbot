@@ -3,13 +3,13 @@ const axios = require('axios');
 require('dotenv').config(); // Załaduj zmienne środowiskowe
 
 const app = express();
-const PORT = process.env.PORT || 3000; // Railway przydziela dynamiczny port
+const PORT = process.env.PORT || 3000; // Railway automatycznie przypisuje port
 
 app.use(express.json()); // Middleware do obsługi JSON
 
-// Testowy endpoint do sprawdzenia, czy serwer działa
+// Testowy endpoint, żeby sprawdzić, czy serwer działa
 app.get('/', (req, res) => {
-    res.send('Chatbot API działa!');
+    res.send('Chatbot API działa poprawnie!');
 });
 
 // Główny endpoint chatbota
@@ -27,7 +27,7 @@ app.post('/api/chatbot', async (req, res) => {
         }, {
             headers: {
                 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`, 
-                'OpenAI-Organization': process.env.OPENAI_ORG_ID, // Wczytaj ID organizacji z Railway
+                'OpenAI-Organization': process.env.OPENAI_ORG_ID, 
                 'Content-Type': 'application/json'
             }
         });
@@ -43,3 +43,4 @@ app.post('/api/chatbot', async (req, res) => {
 app.listen(PORT, () => {
     console.log(`Serwer działa na porcie ${PORT}`);
 });
+
