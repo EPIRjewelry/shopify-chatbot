@@ -22,16 +22,19 @@ app.post('/api/chatbot', async (req, res) => {
         }
 
         const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-           model: 'gpt-4.5-preview', // Możesz zmienić na 'gpt-3.5-turbo'
+    model: 'gpt-4.5-preview',
+    messages: [
+        { role: 'system', content: "Jesteś doradcą klienta w sklepie EPIR Jewellery. Pomagasz w wyborze biżuterii na podstawie preferencji klientów. Znajdujesz najlepsze produkty, opisujesz cechy złota, srebra, kamieni szlachetnych i pomagając w podjęciu decyzji." },
+        { role: 'user', content: message }
+    ],
+}, {
+    headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'OpenAI-Organization': process.env.OPENAI_ORG_ID,
+        'Content-Type': 'application/json'
+    }
+});
 
-            messages: [{ role: 'user', content: message }],
-        }, {
-            headers: {
-                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`, 
-                'OpenAI-Organization': process.env.OPENAI_ORG_ID, 
-                'Content-Type': 'application/json'
-            }
-        });
 
         res.json({ response: response.data.choices[0].message.content });
     } catch (error) {
