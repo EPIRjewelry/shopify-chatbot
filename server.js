@@ -1,6 +1,12 @@
 const express = require('express');
 const axios = require('axios');
+const fs = require('fs');
 require('dotenv').config(); // Załaduj zmienne środowiskowe
+
+// Sprawdzenie, czy plik .env istnieje
+if (!fs.existsSync('.env')) {
+    console.error("Błąd: Plik .env nie istnieje! Upewnij się, że został poprawnie utworzony.");
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000; // Railway automatycznie przypisuje port
@@ -20,6 +26,9 @@ const API_VERSION = process.env.SHOPIFY_API_VERSION || "2025-01";
 // Endpoint do pobierania produktów z Shopify
 app.get('/api/products', async (req, res) => {
     try {
+        console.log("Shopify URL:", SHOPIFY_STORE_URL);
+        console.log("Shopify Access Token:", SHOPIFY_ACCESS_TOKEN ? "OK" : "Brak tokena");
+
         const response = await axios.get(`${SHOPIFY_STORE_URL}/admin/api/${API_VERSION}/products.json`, {
             headers: { 'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN }
         });
@@ -40,13 +49,18 @@ app.post('/api/chatbot', async (req, res) => {
         }
 
         // Pobranie produktów z Shopify
+        console.log("Pobieranie produktów z Shopify...");
         const shopifyResponse = await axios.get(`${SHOPIFY_STORE_URL}/admin/api/${API_VERSION}/products.json`, {
             headers: { 'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN }
         });
 
+        console.log("Pobrano produkty z Shopify.");
         const products = shopifyResponse.data.products.map(p => `${p.title}: ${p.body_html}`).join("\n");
 
         // Wysyłanie zapytania do OpenAI z kontekstem produktów
+        console.log("Wysyłanie zapytania do OpenAI...");
+        console.log("Używany klucz API OpenAI:", process.env.OPENAI_API_KEY ? "OK" : "Brak API Key");
+
         const response = await axios.post('https://api.openai.com/v1/chat/completions', {
             model: 'gpt-4.5-preview',
             messages: [
@@ -60,6 +74,7 @@ app.post('/api/chatbot', async (req, res) => {
             }
         });
 
+        console.log("Odpowiedź z OpenAI otrzymana.");
         res.json({ response: response.data.choices[0].message.content });
     } catch (error) {
         console.error("Błąd API OpenAI:", error.response ? error.response.data : error.message);
@@ -70,4 +85,5 @@ app.post('/api/chatbot', async (req, res) => {
 // Uruchomienie serwera
 app.listen(PORT, () => {
     console.log(`Serwer działa na porcie ${PORT}`);
+    console.log('Serwer uruchomiony na:', PORT, 'API Key:', process.env.OPENAI_API_KEY ? 'OK' : 'Brak API Key');
 });
