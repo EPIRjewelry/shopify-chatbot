@@ -39,6 +39,10 @@ app.post("/api/chatbot", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+app.get("/test-key", (req, res) => {
+    res.json({ key: process.env.OPENAI_API_KEY || "Brak klucza" });
+});
+
 app.listen(PORT, () => {
   console.log(`Serwer działa na porcie ${PORT}`);
 });
