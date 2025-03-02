@@ -1,49 +1,45 @@
-require("dotenv").config();
-const express = require("express");
-const bodyParser = require("body-parser");
-const { Configuration, OpenAIApi } = require("openai");
+const express = require('express');
+const axios = require('axios');
+require('dotenv').config(); // Załaduj zmienne środowiskowe
 
 const app = express();
-app.use(bodyParser.json());
+const PORT = process.env.PORT || 3000; // Railway przydziela dynamiczny port
 
-// ✅ Sprawdzenie klucza API
-if (!process.env.OPENAI_API_KEY) {
-  console.error("Błąd: OPENAI_API_KEY nie jest ustawiony!");
-  process.exit(1);
-}
+app.use(express.json()); // Middleware do obsługi JSON
 
-const configuration = new Configuration({
-  apiKey: process.env.OPENAI_API_KEY,
+// Testowy endpoint do sprawdzenia, czy serwer działa
+app.get('/', (req, res) => {
+    res.send('Chatbot API działa!');
 });
-const openai = new OpenAIApi(configuration);
 
-app.post("/api/chatbot", async (req, res) => {
-  try {
-    const userMessage = req.body.message;
-    if (!userMessage || typeof userMessage !== "string") {
-      return res.status(400).json({ response: "Brak prawidłowej wiadomości od użytkownika." });
+// Główny endpoint chatbota
+app.post('/api/chatbot', async (req, res) => {
+    try {
+        const { message } = req.body;
+
+        if (!message) {
+            return res.status(400).json({ error: 'Brak wiadomości w żądaniu' });
+        }
+
+        const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+            model: 'gpt-4', // Możesz zmienić na 'gpt-3.5-turbo'
+            messages: [{ role: 'user', content: message }],
+        }, {
+            headers: {
+                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`, 
+                'OpenAI-Organization': process.env.OPENAI_ORG_ID, // Wczytaj ID organizacji z Railway
+                'Content-Type': 'application/json'
+            }
+        });
+
+        res.json({ response: response.data.choices[0].message.content });
+    } catch (error) {
+        console.error("Błąd API OpenAI:", error.response ? error.response.data : error.message);
+        res.status(500).json({ response: 'Wystąpił błąd w API OpenAI.', details: error.response?.data });
     }
-
-    const response = await openai.createCompletion({
-      model: "text-davinci-003",
-      prompt: `Klient: ${userMessage}\nChatbot:`,
-      max_tokens: 150,
-      temperature: 0.7,
-    });
-
-    res.json({ response: response.data.choices[0].text.trim() });
-  } catch (error) {
-    console.error("Błąd:", error);
-    res.status(500).json({ response: "Wystąpił błąd." });
-  }
 });
 
-const PORT = process.env.PORT || 3000;
-app.get("/test-key", (req, res) => {
-    res.json({ key: process.env.OPENAI_API_KEY || "Brak klucza" });
-});
-
+// Uruchomienie serwera
 app.listen(PORT, () => {
-  console.log(`Serwer działa na porcie ${PORT}`);
+    console.log(`Serwer działa na porcie ${PORT}`);
 });
-
