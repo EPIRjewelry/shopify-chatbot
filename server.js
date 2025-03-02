@@ -32,7 +32,8 @@ app.post('/api/chatbot', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 3000;
+
 ;app.get("/", (req, res) => {
     res.send("Serwer działa poprawnie!");
 });
