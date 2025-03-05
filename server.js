@@ -11,6 +11,8 @@ const mongoSanitize = require('express-mongo-sanitize');
 const { celebrate, Joi, errors, Segments } = require('celebrate');
 
 const app = express();
+app.set('trust proxy', 1);
+
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
