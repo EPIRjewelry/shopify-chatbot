@@ -113,7 +113,8 @@ const getAIResponse = async (message, products) => {
             return openAIResponse.data.choices?.[0]?.message?.content || "Brak odpowiedzi od AI";
         } else if (AI_PROVIDER === "gemini") {
             const geminiResponse = await axios.post(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent?key=${GEMINI_API_KEY}`,
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-002:generateContent?key=${GEMINI_API_KEY}`
+,
                 {
                     contents: [{ parts: [{ text: `${context}\nKlient: ${message}\nChatbot:` }] }]
                 },
