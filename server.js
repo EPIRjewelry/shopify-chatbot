@@ -2,11 +2,34 @@ const express = require('express');
 const axios = require('axios');
 const fs = require('fs').promises;
 require('dotenv').config();
+const rateLimit = require('express-rate-limit');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const xss = require('xss-clean');
+const mongoSanitize = require('express-mongo-sanitize');
+const { celebrate, Joi, errors, Segments } = require('celebrate');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
+app.use(cors());
+app.use(helmet());
+app.use(xss());
+app.use(mongoSanitize());
+
+// Ograniczenie liczby żądań – przykładowo 100 żądań na 15 minut z jednego IP
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minut
+    max: 100, // maksymalnie 100 żądań na IP
+    message: "Zbyt wiele żądań z tego samego adresu IP, spróbuj ponownie za 15 minut."
+});
+app.use(limiter);
+
+if (process.env.NODE_ENV === 'development') {
+    app.use(morgan('dev'));
+}
 
 // Zmienne środowiskowe
 const SHOPIFY_ACCESS_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
@@ -14,9 +37,8 @@ const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL;
 const API_VERSION = process.env.SHOPIFY_API_VERSION || "2025-01";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const AI_PROVIDER = process.env.AI_PROVIDER || "openai"; // Możesz ustawić "gemini" lub "openai"
+const AI_PROVIDER = process.env.AI_PROVIDER || "openai";
 
-// Walidacja zmiennych środowiskowych na starcie
 if (!SHOPIFY_ACCESS_TOKEN || !SHOPIFY_STORE_URL || !OPENAI_API_KEY || !GEMINI_API_KEY) {
     console.error("Brak wymaganych zmiennych środowiskowych. Sprawdź plik .env.");
     process.exit(1);
@@ -55,13 +77,18 @@ app.get('/api/update-products', async (req, res) => {
     res.json({ message: "Lista produktów zaktualizowana!" });
 });
 
+// Walidacja danych wejściowych dla endpointu chatbota
+const chatbotValidation = celebrate({
+    [Segments.BODY]: Joi.object().keys({
+        sessionId: Joi.string().required(),
+        message: Joi.string().required()
+    })
+});
+
 // Wybór odpowiedniego modelu AI
 const getAIResponse = async (message, products) => {
-    const productDescriptions = [];
-    for (const p of products) {
-        productDescriptions.push(`${p.title}: ${p.body_html}`);
-    }
-    const context = `Jesteś inteligentnym asystentem sklepu jubilerskiego EPIR. Oto lista produktów:\n${productDescriptions.join("\n")}`;
+    const productDescriptions = products.map(p => `${p.title}: ${p.body_html}`).join("\n");
+    const context = `Jesteś inteligentnym asystentem sklepu jubilerskiego EPIR. Oto lista produktów:\n${productDescriptions}`;
 
     try {
         if (AI_PROVIDER === "openai") {
@@ -104,16 +131,23 @@ const getAIResponse = async (message, products) => {
     }
 };
 
-// Główny endpoint chatbota
-app.post('/api/chatbot', async (req, res) => {
+// Główny endpoint chatbota z walidacją
+app.post('/api/chatbot', chatbotValidation, async (req, res) => {
     const { sessionId, message } = req.body;
-    if (!message) return res.status(400).json({ error: 'Brak wiadomości w żądaniu' });
-    if (!sessionId) return res.status(400).json({ error: 'Brak sessionId w żądaniu' });
 
     const products = await loadProductsFromFile();
     const botReply = await getAIResponse(message, products);
 
     res.json({ response: botReply });
+});
+
+// Obsługa błędów walidacji
+app.use(errors());
+
+// Globalny middleware obsługi błędów
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({ error: 'Coś poszło nie tak!' });
 });
 
 app.listen(PORT, () => {
