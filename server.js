@@ -78,22 +78,10 @@ const Product = mongoose.model('Product', productSchema);
 // *** FUNKCJA POBIERANIA PRODUKTÓW Z SHOPIFY GRAPHQL API ***
 const updateProductList = async () => {
     try {
-        console.log("🔄 Pobieram produkty z Shopify...");
-        const response = await axios.post(
-            `${SHOPIFY_STORE_URL}/admin/api/${API_VERSION}/graphql.json`,
-            {
-                query: `{
-                    products(first: 50) {
-                        edges {
-                            node {
-                                id
-                                title
-                                descriptionHtml
-                            }
-                        }
-                    }
-                }`
-            },
+        console.log("🔄 Pobieram produkty z Shopify (REST API)...");
+
+        const response = await axios.get(
+            `${SHOPIFY_STORE_URL}/admin/api/${API_VERSION}/products.json`,
             {
                 headers: {
                     'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
@@ -102,16 +90,8 @@ const updateProductList = async () => {
             }
         );
 
-        if (response.data && response.data.data && response.data.data.products) {
-            const products = response.data.data.products.edges.map(edge => ({
-                id: edge.node.id,
-                title: edge.node.title,
-                description: edge.node.descriptionHtml
-            }));
-
-            await Product.deleteMany({});
-            await Product.insertMany(products);
-            console.log("✅ Produkty zapisane w MongoDB!");
+        if (response.data && response.data.products) {
+            console.log(`✅ Pobrano ${response.data.products.length} produktów z Shopify.`);
         } else {
             console.log("⚠️ Brak produktów w Shopify.");
         }
