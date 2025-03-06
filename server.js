@@ -1,45 +1,18 @@
 const express = require('express');
 const axios = require('axios');
-const fs = require('fs').promises;
-const mongoose = require('mongoose');
-
-// Pobranie adresu MongoDB z Railway
-const MONGO_URI = process.env.MONGO_URL || process.env.MONGO_PUBLIC_URL;
-
-if (!MONGO_URI || !MONGO_URI.startsWith('mongodb')) {
-    console.error("❌ Błąd: Brak poprawnego adresu MongoDB w zmiennych środowiskowych!");
-    process.exit(1);
-}
-
-mongoose.connect(MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-})
-.then(() => console.log("✅ Połączono z MongoDB"))
-.catch(err => {
-    console.error("❌ Błąd połączenia z MongoDB:", err.message);
-    process.exit(1);
-});
-
-const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 const helmet = require('helmet');
-const morgan = require('morgan');
-const xss = require('xss-clean');
-const mongoSanitize = require('express-mongo-sanitize');
-const { celebrate, Joi, errors, Segments } = require('celebrate');
+const rateLimit = require('express-rate-limit');
+require('dotenv').config();
 
 const app = express();
-app.set('trust proxy', 1);
-
-const PORT = 3000; // Ustaw port na sztywno
+const PORT = process.env.PORT || 8080; // Cloud Run wymaga dynamicznego portu
 
 app.use(express.json());
 app.use(cors());
 app.use(helmet());
-app.use(xss());
-app.use(mongoSanitize());
 
+// Ograniczenie liczby żądań (np. 100 żądań na 15 minut z jednego IP)
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 100,
@@ -47,43 +20,26 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-if (process.env.NODE_ENV === 'development') {
-    app.use(morgan('dev'));
+// Zmienne środowiskowe
+const SHOPIFY_ACCESS_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
+const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL;
+const API_VERSION = process.env.SHOPIFY_API_VERSION || "2024-04";
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const AI_PROVIDER = process.env.AI_PROVIDER || "openai";
+
+// Sprawdzenie wymaganych zmiennych
+if (!SHOPIFY_ACCESS_TOKEN || !SHOPIFY_STORE_URL || !OPENAI_API_KEY) {
+    console.error("Brak wymaganych zmiennych środowiskowych. Sprawdź konfigurację.");
+    process.exit(1);
 }
 
-// *** BEZPOŚREDNIE USTAWIENIA – ZAMIAST ENV ***
-const SHOPIFY_ACCESS_TOKEN = "TU_WKLEJ_SWÓJ_TOKEN";
-const SHOPIFY_STORE_URL = "https://epir-art-jewellery.myshopify.com";
-const API_VERSION = "2025-01";
-const OPENAI_API_KEY = "TU_WKLEJ_SWÓJ_OPENAI_KEY";
-const GEMINI_API_KEY = "TU_WKLEJ_SWÓJ_GEMINI_KEY";
-const AI_PROVIDER = "gemini";
-const MONGO_URL = "TU_WKLEJ_SWÓJ_MONGO_URI";
-
-// *** KONFIGURACJA MONGODB ***
-if (mongoose.connection.readyState === 0) {
-    mongoose.connect(MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true })
-        .then(() => console.log("✅ Połączono z MongoDB!"))
-        .catch(err => console.error("❌ Błąd połączenia z MongoDB:", err));
-}
-
-// Definicja schematu produktu
-const productSchema = new mongoose.Schema({
-    id: String,
-    title: String,
-    description: String
-});
-const Product = mongoose.model('Product', productSchema);
-
-// *** FUNKCJA POBIERANIA PRODUKTÓW Z SHOPIFY GRAPHQL API ***
+// Pobieranie produktów z Shopify
 const updateProductList = async () => {
     try {
-        console.log("🔄 Pobieram produkty z Shopify (REST API)...");
-console.log("🔍 Shopify URL:", SHOPIFY_STORE_URL);
-console.log("🔍 API Version:", API_VERSION);
-console.log("🔍 Full URL:", `${SHOPIFY_STORE_URL}/admin/api/${API_VERSION}/products.json`);
-       const response = await axios.get(
-  `https://epir-art-silver-jewellery.myshopify.com/admin/api/${API_VERSION}/products.json`,
+        console.log("🔄 Pobieram produkty z Shopify...");
+        const response = await axios.get(
+            `${SHOPIFY_STORE_URL}/admin/api/${API_VERSION}/products.json`,
             {
                 headers: {
                     'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
@@ -91,50 +47,43 @@ console.log("🔍 Full URL:", `${SHOPIFY_STORE_URL}/admin/api/${API_VERSION}/pro
                 }
             }
         );
-        console.log("🔍 Odpowiedź z Shopify API:", response.data);
-if (response.data && response.data.products) {
-            console.log(`✅ Pobrano ${response.data.products.length} produktów z Shopify.`);
-        } else {
-            console.log("⚠️ Brak produktów w Shopify.");
-        }
+        console.log(`✅ Pobrano ${response.data.products.length} produktów.`);
+        return response.data.products;
     } catch (error) {
         console.error("❌ Błąd pobierania produktów:", error.response?.data || error.message);
+        return [];
     }
 };
 
-// *** ENDPOINT AKTUALIZACJI PRODUKTÓW ***
+// Endpoint do ręcznej aktualizacji produktów
 app.get('/api/update-products', async (req, res) => {
-    await updateProductList();
-    res.json({ message: "Lista produktów zaktualizowana!" });
+    const products = await updateProductList();
+    res.json({ message: "Lista produktów zaktualizowana!", count: products.length });
 });
 
-// *** WALIDACJA DANYCH DLA CHATBOTA ***
-const chatbotValidation = celebrate({
-    [Segments.BODY]: Joi.object().keys({
-        sessionId: Joi.string().required(),
-        message: Joi.string().required()
-    })
-});
+// Endpoint chatbota
+app.post('/api/chatbot', async (req, res) => {
+    const { sessionId, message } = req.body;
+    if (!message || !sessionId) return res.status(400).json({ error: 'Brak wymaganych danych' });
 
-// *** WYBÓR MODELU AI ***
-const getAIResponse = async (message) => {
-    const products = await Product.find({});
-    const productDescriptions = products.map(p => `${p.title}: ${p.description}`).join("\n");
-    const context = `Jesteś asystentem sklepu jubilerskiego EPIR. 
-Specjalizujemy się w biżuterii artystycznej. 
-Nasze produkty: ${productDescriptions}.
-Twoim celem jest pomaganie klientom w wyborze biżuterii, odpowiadanie na pytania, sugerowanie produktów i pomoc w projektowaniu na zamówienie na bazie naszych wzorów oraz pomysłów klienta.`;
+    const products = await updateProductList();
+    const productDescriptions = products.map(p => `${p.title}: ${p.body_html}`).join("\n");
+    const context = `Jesteś doradcą sklepu jubilerskiego EPIR. Pomagaj klientom w wyborze biżuterii.
+    
+Dostępne produkty:
+${productDescriptions}`;
 
     try {
+        let aiResponse;
         if (AI_PROVIDER === "openai") {
-            const openAIResponse = await axios.post(
+            const response = await axios.post(
                 'https://api.openai.com/v1/chat/completions',
                 {
                     model: 'gpt-4.5-preview',
                     messages: [
                         { role: 'system', content: context },
                         { role: 'user', content: message }
-                    ],
+                    ]
                 },
                 {
                     headers: {
@@ -143,45 +92,18 @@ Twoim celem jest pomaganie klientom w wyborze biżuterii, odpowiadanie na pytani
                     }
                 }
             );
-            return openAIResponse.data.choices?.[0]?.message?.content || "Brak odpowiedzi od AI";
-        } else if (AI_PROVIDER === "gemini") {
-            const geminiResponse = await axios.post(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-002:generateContent?key=${GEMINI_API_KEY}`,
-                {
-                    contents: [{ parts: [{ text: `${context}\nKlient: ${message}\nChatbot:` }] }]
-                },
-                {
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                }
-            );
-            return geminiResponse.data.candidates?.[0]?.content?.parts?.[0]?.text || "Brak odpowiedzi od AI";
+            aiResponse = response.data.choices?.[0]?.message?.content || "Brak odpowiedzi od AI";
         } else {
-            return "Nieobsługiwany dostawca AI";
+            aiResponse = "Nieobsługiwany dostawca AI";
         }
+        res.json({ response: aiResponse });
     } catch (error) {
-        console.error("❌ Błąd komunikacji z AI:", error.response?.data || error.message);
-        return "Błąd komunikacji z AI";
+        console.error("❌ Błąd AI:", error.response?.data || error.message);
+        res.status(500).json({ error: "Błąd komunikacji z AI" });
     }
-};
-
-// *** ENDPOINT CHATBOTA ***
-app.post('/api/chatbot', chatbotValidation, async (req, res) => {
-    const { sessionId, message } = req.body;
-    const botReply = await getAIResponse(message);
-    res.json({ response: botReply });
 });
 
-// *** OBSŁUGA BŁĘDÓW WALIDACJI ***
-app.use(errors());
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ error: 'Coś poszło nie tak!' });
-});
-
-// *** START SERWERA ***
-app.listen(PORT, async () => {
+// Start serwera
+app.listen(PORT, () => {
     console.log(`🚀 Serwer działa na porcie ${PORT}`);
-    await updateProductList(); // Automatyczna aktualizacja produktów przy starcie
 });
