@@ -89,6 +89,8 @@ const updateProductList = async () => {
                 }
             }
         );
+        console.log("🔍 Odpowiedź z Shopify API:", response.data);
+
 
         if (response.data && response.data.products) {
             console.log(`✅ Pobrano ${response.data.products.length} produktów z Shopify.`);
