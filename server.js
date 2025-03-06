@@ -82,9 +82,8 @@ const updateProductList = async () => {
 console.log("🔍 Shopify URL:", SHOPIFY_STORE_URL);
 console.log("🔍 API Version:", API_VERSION);
 console.log("🔍 Full URL:", `${SHOPIFY_STORE_URL}/admin/api/${API_VERSION}/products.json`);
-
-        const response = await axios.get(
-            `${SHOPIFY_STORE_URL}/admin/api/${API_VERSION}/products.json`,
+       const response = await axios.get(
+  `https://epir-art-silver-jewellery.myshopify.com/admin/api/${API_VERSION}/products.json`,
             {
                 headers: {
                     'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
@@ -93,9 +92,7 @@ console.log("🔍 Full URL:", `${SHOPIFY_STORE_URL}/admin/api/${API_VERSION}/pro
             }
         );
         console.log("🔍 Odpowiedź z Shopify API:", response.data);
-
-
-        if (response.data && response.data.products) {
+if (response.data && response.data.products) {
             console.log(`✅ Pobrano ${response.data.products.length} produktów z Shopify.`);
         } else {
             console.log("⚠️ Brak produktów w Shopify.");
