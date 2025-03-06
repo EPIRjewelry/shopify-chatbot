@@ -1,7 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs').promises;
-require('dotenv').config();
+const mongoose = require('mongoose'); // Dodano obsługę MongoDB
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -13,7 +13,7 @@ const { celebrate, Joi, errors, Segments } = require('celebrate');
 const app = express();
 app.set('trust proxy', 1);
 
-const PORT = process.env.PORT || 3000;
+const PORT = 3000; // Ustaw port na sztywno
 
 app.use(express.json());
 app.use(cors());
@@ -21,10 +21,9 @@ app.use(helmet());
 app.use(xss());
 app.use(mongoSanitize());
 
-// Ograniczenie liczby żądań – przykładowo 100 żądań na 15 minut z jednego IP
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minut
-    max: 100, // maksymalnie 100 żądań na IP
+    windowMs: 15 * 60 * 1000,
+    max: 100,
     message: "Zbyt wiele żądań z tego samego adresu IP, spróbuj ponownie za 15 minut."
 });
 app.use(limiter);
@@ -33,23 +32,34 @@ if (process.env.NODE_ENV === 'development') {
     app.use(morgan('dev'));
 }
 
-// Zmienne środowiskowe
-const SHOPIFY_ACCESS_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
-const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL;
-const API_VERSION = process.env.SHOPIFY_API_VERSION || "2025-01";
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const AI_PROVIDER = process.env.AI_PROVIDER || "openai";
+// *** BEZPOŚREDNIE USTAWIENIA – ZAMIAST ENV ***
+const SHOPIFY_ACCESS_TOKEN = "TU_WKLEJ_SWÓJ_TOKEN";
+const SHOPIFY_STORE_URL = "https://epir-art-jewellery.myshopify.com";
+const API_VERSION = "2025-01";
+const OPENAI_API_KEY = "TU_WKLEJ_SWÓJ_OPENAI_KEY";
+const GEMINI_API_KEY = "TU_WKLEJ_SWÓJ_GEMINI_KEY";
+const AI_PROVIDER = "gemini";
 
-if (!SHOPIFY_ACCESS_TOKEN || !SHOPIFY_STORE_URL || !OPENAI_API_KEY || !GEMINI_API_KEY) {
-    console.error("Brak wymaganych zmiennych środowiskowych. Sprawdź plik .env.");
-    process.exit(1);
-}
+// *** KONFIGURACJA MONGODB ***
+const MONGO_URI = "TU_WKLEJ_SWÓJ_MONGO_URI";
+mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => console.log("✅ Połączono z MongoDB"))
+    .catch(err => console.error("❌ Błąd połączenia z MongoDB:", err));
 
+// Definicja schematu produktu
+const productSchema = new mongoose.Schema({
+    id: String,
+    title: String,
+    description: String
+});
+const Product = mongoose.model('Product', productSchema);
+
+// *** FUNKCJA POBIERANIA PRODUKTÓW Z SHOPIFY GRAPHQL API ***
 const updateProductList = async () => {
     try {
+        console.log("🔄 Pobieram produkty z Shopify...");
         const response = await axios.post(
-            `${process.env.SHOPIFY_STORE_URL}/admin/api/${process.env.SHOPIFY_API_VERSION}/graphql.json`,
+            `${SHOPIFY_STORE_URL}/admin/api/${API_VERSION}/graphql.json`,
             {
                 query: `{
                     products(first: 50) {
@@ -65,7 +75,7 @@ const updateProductList = async () => {
             },
             {
                 headers: {
-                    'X-Shopify-Access-Token': process.env.SHOPIFY_ACCESS_TOKEN,
+                    'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
                     'Content-Type': 'application/json'
                 }
             }
@@ -78,9 +88,8 @@ const updateProductList = async () => {
                 description: edge.node.descriptionHtml
             }));
 
-            await Product.deleteMany({}); // Czyścimy bazę
-            await Product.insertMany(products); // Zapisujemy nowe produkty
-
+            await Product.deleteMany({});
+            await Product.insertMany(products);
             console.log("✅ Produkty zapisane w MongoDB!");
         } else {
             console.log("⚠️ Brak produktów w Shopify.");
@@ -90,24 +99,13 @@ const updateProductList = async () => {
     }
 };
 
-// Wczytanie produktów z pliku
-const loadProductsFromFile = async () => {
-    try {
-        const data = await fs.readFile('products.json', 'utf8');
-        return JSON.parse(data);
-    } catch (error) {
-        console.error("Błąd wczytywania pliku z produktami:", error);
-        return [];
-    }
-};
-
-// Endpoint do aktualizacji produktów
+// *** ENDPOINT AKTUALIZACJI PRODUKTÓW ***
 app.get('/api/update-products', async (req, res) => {
     await updateProductList();
     res.json({ message: "Lista produktów zaktualizowana!" });
 });
 
-// Walidacja danych wejściowych dla endpointu chatbota
+// *** WALIDACJA DANYCH DLA CHATBOTA ***
 const chatbotValidation = celebrate({
     [Segments.BODY]: Joi.object().keys({
         sessionId: Joi.string().required(),
@@ -115,14 +113,14 @@ const chatbotValidation = celebrate({
     })
 });
 
-// Wybór odpowiedniego modelu AI
-const getAIResponse = async (message, products) => {
-    const productDescriptions = products.map(p => `${p.title}: ${p.body_html}`).join("\n");
+// *** WYBÓR MODELU AI ***
+const getAIResponse = async (message) => {
+    const products = await Product.find({});
+    const productDescriptions = products.map(p => `${p.title}: ${p.description}`).join("\n");
     const context = `Jesteś asystentem sklepu jubilerskiego EPIR. 
-Specjalizujemy się w biżuterii artystycznej.. 
-Nasze produkty: ${productDescriptions.join("\n")}.
-Twoim celem jest pomaganie klientom w wyborze naszej biżuterii, odpowiadanie na pytania i sugerowanie produktów z naszego sklepu a także pomoc w tworzeniu projektów na zamówienie na bazie naszych wzorów i możliwości pracowni EPIR Art Jewellery i pomysłów oraz potrzeb klienta. Pracujesz w kontekście strony epirbizuteria.pl`;
-
+Specjalizujemy się w biżuterii artystycznej. 
+Nasze produkty: ${productDescriptions}.
+Twoim celem jest pomaganie klientom w wyborze biżuterii, odpowiadanie na pytania, sugerowanie produktów i pomoc w projektowaniu na zamówienie na bazie naszych wzorów oraz pomysłów klienta.`;
 
     try {
         if (AI_PROVIDER === "openai") {
@@ -145,8 +143,7 @@ Twoim celem jest pomaganie klientom w wyborze naszej biżuterii, odpowiadanie na
             return openAIResponse.data.choices?.[0]?.message?.content || "Brak odpowiedzi od AI";
         } else if (AI_PROVIDER === "gemini") {
             const geminiResponse = await axios.post(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-002:generateContent?key=${GEMINI_API_KEY}`
-,
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-002:generateContent?key=${GEMINI_API_KEY}`,
                 {
                     contents: [{ parts: [{ text: `${context}\nKlient: ${message}\nChatbot:` }] }]
                 },
@@ -161,31 +158,27 @@ Twoim celem jest pomaganie klientom w wyborze naszej biżuterii, odpowiadanie na
             return "Nieobsługiwany dostawca AI";
         }
     } catch (error) {
-        console.error("Błąd komunikacji z AI:", error.response?.data || error.message);
+        console.error("❌ Błąd komunikacji z AI:", error.response?.data || error.message);
         return "Błąd komunikacji z AI";
     }
 };
 
-// Główny endpoint chatbota z walidacją
+// *** ENDPOINT CHATBOTA ***
 app.post('/api/chatbot', chatbotValidation, async (req, res) => {
     const { sessionId, message } = req.body;
-
-    const products = await loadProductsFromFile();
-    const botReply = await getAIResponse(message, products);
-
+    const botReply = await getAIResponse(message);
     res.json({ response: botReply });
 });
 
-// Obsługa błędów walidacji
+// *** OBSŁUGA BŁĘDÓW WALIDACJI ***
 app.use(errors());
-
-// Globalny middleware obsługi błędów
 app.use((err, req, res, next) => {
     console.error(err.stack);
     res.status(500).json({ error: 'Coś poszło nie tak!' });
 });
 
-app.listen(PORT, () => {
-    console.log(`Serwer działa na porcie ${PORT}`);
-    updateProductList(); // Automatyczna aktualizacja produktów przy uruchomieniu
+// *** START SERWERA ***
+app.listen(PORT, async () => {
+    console.log(`🚀 Serwer działa na porcie ${PORT}`);
+    await updateProductList(); // Automatyczna aktualizacja produktów przy starcie
 });
