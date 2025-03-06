@@ -90,7 +90,11 @@ const chatbotValidation = celebrate({
 // Wybór odpowiedniego modelu AI
 const getAIResponse = async (message, products) => {
     const productDescriptions = products.map(p => `${p.title}: ${p.body_html}`).join("\n");
-    const context = `Jesteś inteligentnym asystentem sklepu jubilerskiego EPIR. Oto lista produktów:\n${productDescriptions}`;
+    const context = `Jesteś asystentem sklepu jubilerskiego EPIR. 
+Specjalizujemy się w biżuterii artystycznej.. 
+Nasze produkty: ${productDescriptions.join("\n")}.
+Twoim celem jest pomaganie klientom w wyborze naszej biżuterii, odpowiadanie na pytania i sugerowanie produktów z naszego sklepu a także pomoc w tworzeniu projektów na zamówienie na bazie naszych wzorów i możliwości pracowni EPIR Art Jewellery i pomysłów oraz potrzeb klienta. Pracujesz w kontekście strony epirbizuteria.pl`;
+
 
     try {
         if (AI_PROVIDER === "openai") {
