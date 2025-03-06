@@ -1,7 +1,26 @@
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs').promises;
-const mongoose = require('mongoose'); // Dodano obsługę MongoDB
+const mongoose = require('mongoose');
+
+// Pobranie adresu MongoDB z Railway
+const MONGO_URI = process.env.MONGO_URL || process.env.MONGO_PUBLIC_URL;
+
+if (!MONGO_URI || !MONGO_URI.startsWith('mongodb')) {
+    console.error("❌ Błąd: Brak poprawnego adresu MongoDB w zmiennych środowiskowych!");
+    process.exit(1);
+}
+
+mongoose.connect(MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+})
+.then(() => console.log("✅ Połączono z MongoDB"))
+.catch(err => {
+    console.error("❌ Błąd połączenia z MongoDB:", err.message);
+    process.exit(1);
+});
+
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 const helmet = require('helmet');
