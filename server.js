@@ -2,6 +2,15 @@ const express = require('express');
 const axios = require('axios');
 const fs = require('fs').promises;
 const mongoose = require('mongoose'); // Dodano obsługę MongoDB
+const MONGO_URL = "mongodb://mongo:blacGlyOleggEVxEsqEtKOxqAwGRkvGF@mongodb.railway.internal:27017";
+
+mongoose.connect(MONGO_URL, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+})
+.then(() => console.log("✅ Połączono z MongoDB!"))
+.catch(err => console.error("❌ Błąd połączenia z MongoDB:", err));
+
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 const helmet = require('helmet');
