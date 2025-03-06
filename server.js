@@ -46,19 +46,47 @@ if (!SHOPIFY_ACCESS_TOKEN || !SHOPIFY_STORE_URL || !OPENAI_API_KEY || !GEMINI_AP
     process.exit(1);
 }
 
-// Pobieranie i zapisanie produktów z Shopify
 const updateProductList = async () => {
     try {
-        const response = await axios.get(`${SHOPIFY_STORE_URL}/admin/api/${API_VERSION}/products.json`, {
-            headers: {
-                'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
-                'Content-Type': 'application/json'
+        const response = await axios.post(
+            `${process.env.SHOPIFY_STORE_URL}/admin/api/${process.env.SHOPIFY_API_VERSION}/graphql.json`,
+            {
+                query: `{
+                    products(first: 50) {
+                        edges {
+                            node {
+                                id
+                                title
+                                descriptionHtml
+                            }
+                        }
+                    }
+                }`
+            },
+            {
+                headers: {
+                    'X-Shopify-Access-Token': process.env.SHOPIFY_ACCESS_TOKEN,
+                    'Content-Type': 'application/json'
+                }
             }
-        });
-        await fs.writeFile('products.json', JSON.stringify(response.data.products, null, 2));
-        console.log("Plik products.json został zaktualizowany!");
+        );
+
+        if (response.data && response.data.data && response.data.data.products) {
+            const products = response.data.data.products.edges.map(edge => ({
+                id: edge.node.id,
+                title: edge.node.title,
+                description: edge.node.descriptionHtml
+            }));
+
+            await Product.deleteMany({}); // Czyścimy bazę
+            await Product.insertMany(products); // Zapisujemy nowe produkty
+
+            console.log("✅ Produkty zapisane w MongoDB!");
+        } else {
+            console.log("⚠️ Brak produktów w Shopify.");
+        }
     } catch (error) {
-        console.error("Błąd pobierania produktów:", error.response?.data || error.message);
+        console.error("❌ Błąd pobierania produktów:", error.response?.data || error.message);
     }
 };
 
