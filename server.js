@@ -2,16 +2,6 @@ const express = require('express');
 const axios = require('axios');
 const fs = require('fs').promises;
 const mongoose = require('mongoose'); // Dodano obsługę MongoDB
-const MONGO_URL = "mongodb://mongo:blacGlyOleggEVxEsqEtKOxqAwGRkvGF@nozomi.proxy.rlw";
-
-
-mongoose.connect(MONGO_URL, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-})
-.then(() => console.log("✅ Połączono z MongoDB!"))
-.catch(err => console.error("❌ Błąd połączenia z MongoDB:", err));
-
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -49,12 +39,14 @@ const API_VERSION = "2025-01";
 const OPENAI_API_KEY = "TU_WKLEJ_SWÓJ_OPENAI_KEY";
 const GEMINI_API_KEY = "TU_WKLEJ_SWÓJ_GEMINI_KEY";
 const AI_PROVIDER = "gemini";
+const MONGO_URL = "TU_WKLEJ_SWÓJ_MONGO_URI";
 
 // *** KONFIGURACJA MONGODB ***
-const MONGO_URI = "TU_WKLEJ_SWÓJ_MONGO_URI";
-mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-    .then(() => console.log("✅ Połączono z MongoDB"))
-    .catch(err => console.error("❌ Błąd połączenia z MongoDB:", err));
+if (mongoose.connection.readyState === 0) {
+    mongoose.connect(MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true })
+        .then(() => console.log("✅ Połączono z MongoDB!"))
+        .catch(err => console.error("❌ Błąd połączenia z MongoDB:", err));
+}
 
 // Definicja schematu produktu
 const productSchema = new mongoose.Schema({
