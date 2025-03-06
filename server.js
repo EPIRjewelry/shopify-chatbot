@@ -2,7 +2,8 @@ const express = require('express');
 const axios = require('axios');
 const fs = require('fs').promises;
 const mongoose = require('mongoose'); // Dodano obsługę MongoDB
-const MONGO_URL = "mongodb://mongo:blacGlyOleggEVxEsqEtKOxqAwGRkvGF@mongodb.railway.internal:27017";
+const MONGO_URL = "mongodb://mongo:blacGlyOleggEVxEsqEtKOxqAwGRkvGF@nozomi.proxy.rlw";
+
 
 mongoose.connect(MONGO_URL, {
     useNewUrlParser: true,
