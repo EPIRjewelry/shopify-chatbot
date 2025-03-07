@@ -1,14 +1,12 @@
-# Użyj oficjalnego obrazu Pythona jako bazowego
-FROM python:3.9
+FROM python:3.9-slim
 
-# Ustaw katalog roboczy
 WORKDIR /app
 
-# Skopiuj pliki do kontenera
-COPY . /app
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Zainstaluj zależności
-RUN pip install -r requirements.txt
+COPY . /app/
 
-# Uruchom aplikację
+EXPOSE 8080
+
 CMD ["python", "app.py"]
