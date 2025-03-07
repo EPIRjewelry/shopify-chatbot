@@ -1,12 +1,17 @@
-FROM python:3.9-slim
+# Użyj oficjalnego obrazu Node.js
+FROM node:18
 
+# Ustaw katalog roboczy w kontenerze
 WORKDIR /app
 
-COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt
+# Skopiuj pliki aplikacji
+COPY package.json package-lock.json ./
+RUN npm install
 
-COPY app.py /app/
+COPY . .
 
+# Ustaw port
 EXPOSE 8080
 
-CMD ["python", "/app/app.py"]
+# Uruchom aplikację
+CMD ["npm", "start"]
