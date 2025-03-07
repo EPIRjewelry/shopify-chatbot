@@ -65,10 +65,11 @@ app.get('/api/update-products', async (req, res) => {
     res.json({ message: "Lista produktów zaktualizowana!", count: products.length });
 });
 
-// Endpoint chatbota
+// Endpoint chatbota z OpenAI i Gemini
 app.post('/api/chatbot', async (req, res) => {
-    const { sessionId, message } = req.body;
-    if (!message || !sessionId) return res.status(400).json({ error: 'Brak wymaganych danych' });
+    const { sessionId, message, task } = req.body;
+    if (!message || !sessionId || !task) 
+        return res.status(400).json({ error: 'Brak wymaganych danych: message, sessionId, task' });
 
     const products = await updateProductList();
     const productDescriptions = products.map(p => `${p.title}: ${p.body_html}`).join("\n");
@@ -77,9 +78,10 @@ app.post('/api/chatbot', async (req, res) => {
 Dostępne produkty:
 ${productDescriptions}`;
 
+    let aiResponse = "Nieznane zadanie.";
+
     try {
-        let aiResponse;
-        if (AI_PROVIDER === "openai") {
+        if (task === "chat") {  // 🟢 OpenAI obsługuje chatbota
             const response = await axios.post(
                 'https://api.openai.com/v1/chat/completions',
                 {
@@ -97,25 +99,26 @@ ${productDescriptions}`;
                 }
             );
             aiResponse = response.data.choices?.[0]?.message?.content || "Brak odpowiedzi od AI";
-        } else if (AI_PROVIDER === "gemini") {
+        } 
+        else if (task === "analyze") {  // 🔵 Gemini analizuje zapytania klientów
             const response = await axios.post(
                 `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-002:generateContent?key=${GEMINI_API_KEY}`,
                 {
-                    contents: [{ parts: [{ text: `${context}\nKlient: ${message}\nChatbot:` }] }]
+                    contents: [{ parts: [{ text: `Analizuj to zapytanie klienta: ${message}\n` }] }]
                 },
                 {
                     headers: { 'Content-Type': 'application/json' }
                 }
             );
-            aiResponse = response.data.candidates?.[0]?.content?.parts?.[0]?.text || "Brak odpowiedzi od AI";
-        } else {
-            aiResponse = "Nieobsługiwany dostawca AI";
+            aiResponse = response.data.candidates?.[0]?.content?.parts?.[0]?.text || "Brak analizy od AI";
         }
-        res.json({ response: aiResponse });
     } catch (error) {
         console.error("❌ Błąd AI:", error.response?.data || error.message);
         res.status(500).json({ error: "Błąd komunikacji z AI" });
+        return;
     }
+
+    res.json({ response: aiResponse });
 });
 
 // Obsługa błędów (zapobieganie crashom)
