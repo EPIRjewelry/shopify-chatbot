@@ -58,9 +58,14 @@ const updateProductList = async () => {
         return [];
     }
 };
+// Podstawowa ścieżka do testu działania serwera
+app.get('/', (req, res) => {
+  res.send('Serwer działa poprawnie!');
+});
 
 // Endpoint do ręcznej aktualizacji produktów
 app.get('/api/update-products', async (req, res) => {
+
     const products = await updateProductList();
     res.json({ message: "Lista produktów zaktualizowana!", count: products.length });
 });
