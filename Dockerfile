@@ -1,18 +1,18 @@
 # Użyj oficjalnego obrazu Node.js
 FROM node:18
 
-# Ustaw katalog roboczy
+# Ustaw katalog roboczy w kontenerze
 WORKDIR /app
 
-# Skopiuj pliki zależności i zainstaluj pakiety
+# Skopiuj pliki package.json i package-lock.json i zainstaluj zależności
 COPY package.json package-lock.json ./
 RUN npm install
 
-# Skopiuj cały kod aplikacji
+# Skopiuj resztę plików aplikacji
 COPY . .
 
-# Otwórz port 8080 dla Cloud Run
+# Ustaw port (Google Cloud Run wymaga 8080)
 EXPOSE 8080
 
-# Uruchom serwer
+# Uruchom serwer aplikacji
 CMD ["npm", "start"]
