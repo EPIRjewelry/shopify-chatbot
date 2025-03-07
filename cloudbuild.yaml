@@ -12,5 +12,6 @@ steps:
             '--region', 'us-central1',
             '--allow-unauthenticated' ]
 
+# Opcjonalnie: Jeśli chcesz zapisywać logi, dodaj:
 options:
   logging: CLOUD_LOGGING_ONLY
