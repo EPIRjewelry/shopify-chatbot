@@ -4,9 +4,16 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
+const path = require('path'); // <--- dodajemy path tutaj
 
 const app = express();
 const PORT = process.env.PORT || 8080; // Cloud Run wymaga dynamicznego portu
+
+// Ustawiamy trust proxy, żeby wyeliminować błąd związany z X-Forwarded-For
+app.set('trust proxy', true);
+
+// Middleware do statycznych plików (m.in. test_chatbot.html)
+app.use(express.static(path.join(__dirname)));
 
 app.use(express.json());
 app.use(cors());
@@ -14,9 +21,9 @@ app.use(helmet());
 
 // Ograniczenie liczby żądań (100 żądań na 15 minut z jednego IP)
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    message: "Zbyt wiele żądań z tego samego adresu IP, spróbuj ponownie za 15 minut."
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: "Zbyt wiele żądań z tego samego adresu IP, spróbuj ponownie za 15 minut."
 });
 app.use(limiter);
 
@@ -58,6 +65,7 @@ const updateProductList = async () => {
         return [];
     }
 };
+
 // Podstawowa ścieżka do testu działania serwera
 app.get('/', (req, res) => {
   res.send('Serwer działa poprawnie!');
@@ -65,7 +73,6 @@ app.get('/', (req, res) => {
 
 // Endpoint do ręcznej aktualizacji produktów
 app.get('/api/update-products', async (req, res) => {
-
     const products = await updateProductList();
     res.json({ message: "Lista produktów zaktualizowana!", count: products.length });
 });
@@ -73,8 +80,9 @@ app.get('/api/update-products', async (req, res) => {
 // Endpoint chatbota z OpenAI i Gemini
 app.post('/api/chatbot', async (req, res) => {
     const { sessionId, message, task } = req.body;
-    if (!message || !sessionId || !task) 
+    if (!message || !sessionId || !task) {
         return res.status(400).json({ error: 'Brak wymaganych danych: message, sessionId, task' });
+    }
 
     const products = await updateProductList();
     const productDescriptions = products.map(p => `${p.title}: ${p.body_html}`).join("\n");
@@ -104,8 +112,7 @@ ${productDescriptions}`;
                 }
             );
             aiResponse = response.data.choices?.[0]?.message?.content || "Brak odpowiedzi od AI";
-        } 
-        else if (task === "analyze") {  // 🔵 Gemini analizuje zapytania klientów
+        } else if (task === "analyze") {  // 🔵 Gemini analizuje zapytania klientów
             const response = await axios.post(
                 `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-002:generateContent?key=${GEMINI_API_KEY}`,
                 {
@@ -134,17 +141,4 @@ process.on('uncaughtException', (err) => {
 // Start serwera
 app.listen(PORT, () => {
     console.log(`🚀 Serwer działa na porcie ${PORT}`);
-});
-const express = require("express");
-const path = require("path");
-
-const app = express();
-const PORT = process.env.PORT || 8080;
-app.set('trust proxy', true);
-
-// Obsługa pliku test_chatbot.html
-app.use(express.static(path.join(__dirname)));
-
-app.listen(PORT, () => {
-  console.log(`Serwer działa na porcie ${PORT}`);
 });
