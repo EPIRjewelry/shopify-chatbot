@@ -4,22 +4,23 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
-const path = require('path'); // <--- dodajemy path tutaj
+const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 8080; // Cloud Run wymaga dynamicznego portu
+const PORT = process.env.PORT || 8080;
 
-// Ustawiamy trust proxy, żeby wyeliminować błąd związany z X-Forwarded-For
+// Usunięcie błędu z X-Forwarded-For
 app.set('trust proxy', true);
 
-// Middleware do statycznych plików (m.in. test_chatbot.html)
+// Serwowanie plików statycznych (m.in. test_chatbot.html)
 app.use(express.static(path.join(__dirname)));
 
+// Środowisko
 app.use(express.json());
 app.use(cors());
 app.use(helmet());
 
-// Ograniczenie liczby żądań (100 żądań na 15 minut z jednego IP)
+// Limit żądań
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -35,110 +36,111 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const AI_PROVIDER = process.env.AI_PROVIDER || "openai";
 
-// Debugowanie zmiennych środowiskowych (usuń w produkcji)
+// Debug (opcjonalny)
 console.log("🔹 SHOPIFY_STORE_URL:", SHOPIFY_STORE_URL);
 console.log("🔹 AI_PROVIDER:", AI_PROVIDER);
 
-// Sprawdzenie wymaganych zmiennych
+// Sprawdzenie zmiennych
 if (!SHOPIFY_ACCESS_TOKEN || !SHOPIFY_STORE_URL || !OPENAI_API_KEY) {
-    console.error("❌ Brak wymaganych zmiennych środowiskowych. Sprawdź konfigurację.");
-    process.exit(1);
+  console.error("❌ Brak wymaganych zmiennych środowiskowych. Sprawdź konfigurację.");
+  process.exit(1);
 }
 
-// Pobieranie produktów z Shopify
+// Funkcja pobierania produktów z Shopify
 const updateProductList = async () => {
-    try {
-        console.log("🔄 Pobieram produkty z Shopify...");
-        const response = await axios.get(
-            `${SHOPIFY_STORE_URL}/admin/api/${API_VERSION}/products.json`,
-            {
-                headers: {
-                    'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
-        console.log(`✅ Pobrano ${response.data.products.length} produktów.`);
-        return response.data.products;
-    } catch (error) {
-        console.error("❌ Błąd pobierania produktów:", error.response?.data || error.message);
-        return [];
-    }
+  try {
+    console.log("🔄 Pobieram produkty z Shopify...");
+    const response = await axios.get(
+      `${SHOPIFY_STORE_URL}/admin/api/${API_VERSION}/products.json`,
+      {
+        headers: {
+          'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    console.log(`✅ Pobrano ${response.data.products.length} produktów.`);
+    return response.data.products;
+  } catch (error) {
+    console.error("❌ Błąd pobierania produktów:", error.response?.data || error.message);
+    return [];
+  }
 };
 
-// Podstawowa ścieżka do testu działania serwera
+// Endpoint główny – serwuje plik test_chatbot.html
 app.get('/', (req, res) => {
-  res.send('Serwer działa poprawnie!');
+  res.sendFile(path.join(__dirname, 'test_chatbot.html'));
 });
 
 // Endpoint do ręcznej aktualizacji produktów
 app.get('/api/update-products', async (req, res) => {
-    const products = await updateProductList();
-    res.json({ message: "Lista produktów zaktualizowana!", count: products.length });
+  const products = await updateProductList();
+  res.json({ message: "Lista produktów zaktualizowana!", count: products.length });
 });
 
-// Endpoint chatbota z OpenAI i Gemini
+// Endpoint chatbota (OpenAI / Gemini)
 app.post('/api/chatbot', async (req, res) => {
-    const { sessionId, message, task } = req.body;
-    if (!message || !sessionId || !task) {
-        return res.status(400).json({ error: 'Brak wymaganych danych: message, sessionId, task' });
-    }
+  const { sessionId, message, task } = req.body;
+  if (!message || !sessionId || !task) {
+    return res.status(400).json({ error: 'Brak wymaganych danych: message, sessionId, task' });
+  }
 
-    const products = await updateProductList();
-    const productDescriptions = products.map(p => `${p.title}: ${p.body_html}`).join("\n");
-    const context = `Jesteś doradcą sklepu jubilerskiego EPIR. Pomagaj klientom w wyborze biżuterii.
+  const products = await updateProductList();
+  const productDescriptions = products.map(p => `${p.title}: ${p.body_html}`).join("\n");
+  const context = `Jesteś doradcą sklepu jubilerskiego EPIR. Pomagaj klientom w wyborze biżuterii.
 
 Dostępne produkty:
 ${productDescriptions}`;
 
-    let aiResponse = "Nieznane zadanie.";
+  let aiResponse = "Nieznane zadanie.";
 
-    try {
-        if (task === "chat") {  // 🟢 OpenAI obsługuje chatbota
-            const response = await axios.post(
-                'https://api.openai.com/v1/chat/completions',
-                {
-                    model: 'gpt-4.5-preview',
-                    messages: [
-                        { role: 'system', content: context },
-                        { role: 'user', content: message }
-                    ]
-                },
-                {
-                    headers: {
-                        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-                        'Content-Type': 'application/json'
-                    }
-                }
-            );
-            aiResponse = response.data.choices?.[0]?.message?.content || "Brak odpowiedzi od AI";
-        } else if (task === "analyze") {  // 🔵 Gemini analizuje zapytania klientów
-            const response = await axios.post(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-002:generateContent?key=${GEMINI_API_KEY}`,
-                {
-                    contents: [{ parts: [{ text: `Analizuj to zapytanie klienta: ${message}\n` }] }]
-                },
-                {
-                    headers: { 'Content-Type': 'application/json' }
-                }
-            );
-            aiResponse = response.data.candidates?.[0]?.content?.parts?.[0]?.text || "Brak analizy od AI";
+  try {
+    if (task === "chat") {
+      // 🟢 OpenAI
+      const response = await axios.post(
+        'https://api.openai.com/v1/chat/completions',
+        {
+          model: 'gpt-4.5-preview',
+          messages: [
+            { role: 'system', content: context },
+            { role: 'user', content: message }
+          ]
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${OPENAI_API_KEY}`,
+            'Content-Type': 'application/json'
+          }
         }
-    } catch (error) {
-        console.error("❌ Błąd AI:", error.response?.data || error.message);
-        res.status(500).json({ error: "Błąd komunikacji z AI" });
-        return;
+      );
+      aiResponse = response.data.choices?.[0]?.message?.content || "Brak odpowiedzi od AI";
+    } else if (task === "analyze") {
+      // 🔵 Gemini
+      const response = await axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-002:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          contents: [{ parts: [{ text: `Analizuj to zapytanie klienta: ${message}\n` }] }]
+        },
+        {
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+      aiResponse = response.data.candidates?.[0]?.content?.parts?.[0]?.text || "Brak analizy od AI";
     }
+  } catch (error) {
+    console.error("❌ Błąd AI:", error.response?.data || error.message);
+    return res.status(500).json({ error: "Błąd komunikacji z AI" });
+  }
 
-    res.json({ response: aiResponse });
+  res.json({ response: aiResponse });
 });
 
-// Obsługa błędów (zapobieganie crashom)
+// Obsługa błędów
 process.on('uncaughtException', (err) => {
-    console.error('❌ Nieoczekiwany błąd:', err);
+  console.error('❌ Nieoczekiwany błąd:', err);
 });
 
 // Start serwera
 app.listen(PORT, () => {
-    console.log(`🚀 Serwer działa na porcie ${PORT}`);
+  console.log(`🚀 Serwer działa na porcie ${PORT}`);
 });
