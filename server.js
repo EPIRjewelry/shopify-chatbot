@@ -135,3 +135,15 @@ process.on('uncaughtException', (err) => {
 app.listen(PORT, () => {
     console.log(`🚀 Serwer działa na porcie ${PORT}`);
 });
+const express = require("express");
+const path = require("path");
+
+const app = express();
+const PORT = process.env.PORT || 8080;
+
+// Obsługa pliku test_chatbot.html
+app.use(express.static(path.join(__dirname)));
+
+app.listen(PORT, () => {
+  console.log(`Serwer działa na porcie ${PORT}`);
+});
