@@ -141,6 +141,8 @@ process.on('uncaughtException', (err) => {
 });
 
 // Start serwera
+app.use(express.static('public'));
+
 app.listen(PORT, () => {
   console.log(`🚀 Serwer działa na porcie ${PORT}`);
 });
